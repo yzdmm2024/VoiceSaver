@@ -6,7 +6,10 @@ INSTALL_TARGET_PROCESSES = com.tencent.xin
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = VoiceSaver
-VoiceSaver_FILES = src/Tweak.xm src/shine/*.c
+VoiceSaver_FILES = src/Tweak.xm \
+	src/shine/bitstream.c src/shine/huffman.c src/shine/l3bitstream.c \
+	src/shine/l3loop.c src/shine/l3mdct.c src/shine/l3subband.c \
+	src/shine/layer3.c src/shine/reservoir.c src/shine/tables.c
 VoiceSaver_CFLAGS = -fobjc-arc -Isrc/shine
 VoiceSaver_LDFLAGS = -undefined dynamic_lookup
 
