@@ -1,5 +1,5 @@
 export ARCHS = arm64 arm64e
-export TARGET = iphone:clang:16.0:15.0
+export TARGET = iphone:clang:14.5:15.0
 export THEOS_PACKAGE_SCHEME = rootless
 INSTALL_TARGET_PROCESSES = com.tencent.xin
 
