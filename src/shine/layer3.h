@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* This is the struct used to tell the encoder about the input PCM */
 
 enum channels { PCM_MONO = 1, PCM_STEREO = 2 };
@@ -142,5 +146,9 @@ unsigned char *shine_flush(shine_t s, int *written);
 /* Close an encoder, freeing all associated memory. Encoder handler is not
  * valid after this call. */
 void shine_close(shine_t s);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

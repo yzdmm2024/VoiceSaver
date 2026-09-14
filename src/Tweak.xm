@@ -44,7 +44,6 @@
 static dispatch_queue_t g_workQueue = nil;
 static NSString *g_savedDir = nil;                 // 容器内保存目录
 static __strong id g_lastWrap = nil;              // 最近一条收到的语音(菜单兜底)
-static __strong id g_longPressedWrap = nil;       // 当前长按的语音(优先)
 
 static id WXGetService(Class cls) {
     if (!cls) return nil;
@@ -310,45 +309,46 @@ static void WXProcessReceivedVoice(id wrap) {
 }
 %end
 
-// 长按菜单: 给 UIMenuController 追加「保存」
-%hook UIMenuController
-- (void)setMenuItems:(NSArray *)items {
-    NSMutableArray *arr = items ? [items mutableCopy] : [NSMutableArray new];
-    BOOL has = NO;
-    for (id it in arr) {
-        if ([[it title] isEqualToString:@"保存"]) { has = YES; break; }
-    }
-    if (!has) {
-        UIMenuItem *item = [[UIMenuItem alloc] initWithTitle:@"保存" action:@selector(voiceSaver_save:)];
-        [arr addObject:item];
-    }
-    %orig(arr);
-}
-%end
+// 长按菜单: 通过 willShowMenuController 拿到被长按的语音, 在 setMenuItems 时追加「保存」
+// 真实菜单构建方法是 willShowMenuController:inMsgWrap:menuSourceType:buttonList: (8.0.75 实测存在)
+static __strong id g_vsActiveWrap = nil;   // 当前弹菜单的语音 wrap (willShowMenuController 设置, setMenuItems 消费)
+static __strong id g_vsSaveWrap = nil;     // 待保存的 wrap (点「保存」时消费)
 
-// 让 BaseMsgContentViewController 能响应我们的 action, 并捕获长按的语音
 %hook BaseMsgContentViewController
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(voiceSaver_save:)) return YES;
+    if (action == @selector(vsSaveVoice:)) return YES;
     return %orig;
 }
 
-- (void)onLongPressMsg:(UILongPressGestureRecognizer *)gesture {
-    %orig;
+- (void)willShowMenuController:(UIMenuController *)mc inMsgWrap:(id)wrap menuSourceType:(int)t buttonList:(id)list {
     @try {
-        UIView *v = gesture.view;
-        id w = nil;
-        if (v) w = [v valueForKey:@"msgWrap"];
-        if (!w) w = [v.superview valueForKey:@"msgWrap"];
-        if (w) g_longPressedWrap = w;
-    } @catch (id e) { WXLOG(@"capture longpress err: %@", e); }
+        if (wrap && [wrap respondsToSelector:@selector(m_uiMessageType)] && [wrap m_uiMessageType] == 34)
+            g_vsActiveWrap = wrap; else g_vsActiveWrap = nil;
+    } @catch (id e) { g_vsActiveWrap = nil; }
+    %orig;
+}
+
+- (void)willShowMenuController:(UIMenuController *)mc inMsgWrap:(id)wrap menuSourceType:(int)t {
+    @try {
+        if (wrap && [wrap respondsToSelector:@selector(m_uiMessageType)] && [wrap m_uiMessageType] == 34)
+            g_vsActiveWrap = wrap; else g_vsActiveWrap = nil;
+    } @catch (id e) { g_vsActiveWrap = nil; }
+    %orig;
+}
+
+- (void)willShowMenuController:(UIMenuController *)mc inMsgWrap:(id)wrap {
+    @try {
+        if (wrap && [wrap respondsToSelector:@selector(m_uiMessageType)] && [wrap m_uiMessageType] == 34)
+            g_vsActiveWrap = wrap; else g_vsActiveWrap = nil;
+    } @catch (id e) { g_vsActiveWrap = nil; }
+    %orig;
 }
 
 %new
-- (void)voiceSaver_save:(id)sender {
-    id wrap = g_longPressedWrap ?: g_lastWrap;
+- (void)vsSaveVoice:(id)sender {
+    id wrap = g_vsSaveWrap ?: g_lastWrap;
+    g_vsSaveWrap = nil;
     if (!wrap) { WXLOG(@"no wrap to save"); return; }
-    g_longPressedWrap = nil;
     dispatch_async(g_workQueue, ^{
         @autoreleasepool {
             @try {
@@ -359,6 +359,29 @@ static void WXProcessReceivedVoice(id wrap) {
             } @catch (id e) { WXLOG(@"menu save err: %@", e); }
         }
     });
+}
+%end
+
+// 拦截 setMenuItems: 在语音菜单里追加「保存」(willShowMenuController 已把 wrap 放进 g_vsActiveWrap)
+%hook UIMenuController
+- (void)setMenuItems:(NSArray *)items {
+    NSMutableArray *arr = items ? [items mutableCopy] : [NSMutableArray new];
+    BOOL voice = NO;
+    @try {
+        if (g_vsActiveWrap && [g_vsActiveWrap respondsToSelector:@selector(m_uiMessageType)]
+            && [g_vsActiveWrap m_uiMessageType] == 34) voice = YES;
+    } @catch (id e) {}
+    if (voice) {
+        BOOL has = NO;
+        for (id it in arr) { if ([[it title] isEqualToString:@"保存"]) { has = YES; break; } }
+        if (!has) {
+            UIMenuItem *item = [[UIMenuItem alloc] initWithTitle:@"保存" action:@selector(vsSaveVoice:)];
+            [arr addObject:item];
+            g_vsSaveWrap = g_vsActiveWrap;   // 记下要保存哪条
+        }
+    }
+    g_vsActiveWrap = nil;   // 用完即清
+    %orig(arr);
 }
 %end
 
