@@ -10,7 +10,7 @@ VoiceSaver_FILES = src/Tweak.xm \
 	src/shine/bitstream.c src/shine/huffman.c src/shine/l3bitstream.c \
 	src/shine/l3loop.c src/shine/l3mdct.c src/shine/l3subband.c \
 	src/shine/layer3.c src/shine/reservoir.c src/shine/tables.c
-VoiceSaver_CFLAGS = -fobjc-arc -Isrc/shine
+VoiceSaver_CFLAGS = -fobjc-arc -Isrc/shine -Wno-error -Wno-unused-but-set-variable -Wno-unused-variable
 VoiceSaver_LDFLAGS = -undefined dynamic_lookup
 
 include $(THEOS_MAKE_PATH)/tweak.mk
