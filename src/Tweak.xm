@@ -19,6 +19,7 @@
 - (unsigned int)m_uiMessageType;
 - (NSString *)m_nsFromUsr;
 - (NSString *)m_nsToUsr;
+- (NSString *)m_nsContent;
 - (NSString *)getVoicePath;
 @end
 
