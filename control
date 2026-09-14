@@ -1,0 +1,9 @@
+Package: com.yzdmm.voicesaver
+Name: VoiceSaver
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Maintainer: yzdmm
+Author: yzdmm
+Section: Tweaks
+Description: 微信语音保存: 长按语音消息菜单加「保存」, 转 MP3 并可选存到系统文件 App; 收到别人语音也会静默转存一份。
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 16.0), firmware (<< 17.0)

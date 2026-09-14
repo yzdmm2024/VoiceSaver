@@ -1,0 +1,80 @@
+name: build-voicesaver
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Theos dependencies
+        run: |
+          brew install ldid dpkg xz perl || true
+
+      - name: Install Theos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth=1 https://github.com/theos/theos.git $HOME/theos
+          export THEOS=$HOME/theos
+          $THEOS/bin/update-theos
+          mkdir -p $HOME/theos/sdks
+          gh release download -R theos/sdks -p "iPhoneOS14.5.sdk.tar.xz" -D /tmp
+          tar -xJf /tmp/iPhoneOS14.5.sdk.tar.xz -C $HOME/theos/sdks/
+          ln -sf "$HOME/theos/sdks/iPhoneOS14.5.sdk" "$HOME/theos/sdks/iPhoneOS14.0.sdk"
+
+      - name: Build with Theos
+        run: |
+          export THEOS=$HOME/theos
+          rm -rf .theos
+          make
+          echo "=== Build output ==="
+          find .theos -type f 2>/dev/null | head -50
+
+      - name: Package deb manual
+        run: |
+          VERSION=$(grep '^Version:' control | awk '{print $2}')
+          mkdir -p stage/DEBIAN stage/var/jb/usr/lib/TweakInject
+
+          cp .theos/obj/debug/VoiceSaver.dylib stage/var/jb/usr/lib/TweakInject/ 2>/dev/null || \
+          cp .theos/obj/VoiceSaver.dylib stage/var/jb/usr/lib/TweakInject/ || { echo "FATAL: VoiceSaver.dylib not found"; find .theos -name 'VoiceSaver.dylib'; exit 1; }
+
+          cp layout/Library/MobileSubstrate/DynamicLibraries/VoiceSaver.plist stage/var/jb/usr/lib/TweakInject/
+
+          # 自检
+          test -f stage/var/jb/usr/lib/TweakInject/VoiceSaver.dylib || { echo "FATAL: dylib missing"; exit 1; }
+          test -f stage/var/jb/usr/lib/TweakInject/VoiceSaver.plist || { echo "FATAL: plist missing"; exit 1; }
+
+          # 显式假签名(兜底)
+          find stage -type f -name "*.dylib" -exec ldid -S {} \;
+
+          cp control stage/DEBIAN/control
+          sed -i '' "s/^Version:.*/Version: $VERSION/" stage/DEBIAN/control
+          echo "" >> stage/DEBIAN/control
+          chmod 755 stage/DEBIAN/control
+
+          echo "=== Stage layout ==="
+          find stage -type f
+
+          mkdir -p packages
+          dpkg-deb --root-owner-group -b stage packages/com.yzdmm.voicesaver_${VERSION}_iphoneos-arm64.deb
+          echo "=== Deb package ==="
+          ls -la packages/
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceSaver-deb
+          path: packages/*.deb
+
+      - name: Release on tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*.deb
